@@ -19,5 +19,5 @@ export async function getSpotifyToken(){
         throw new Error(data.error_description || "Erro ao autenticar com Spotify")
     }
 
-    return response.json()
+    return response.json(
 }
