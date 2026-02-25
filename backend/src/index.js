@@ -1,6 +1,6 @@
 import dotenv from "dotenv"
 import express from "express"
-import { getSpotifyToken } from "./spotify.js"
+import { getSpotifyToken } from "./server.js"
 
 dotenv.config()
 
