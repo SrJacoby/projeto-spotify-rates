@@ -1,23 +1,18 @@
-import fetch from "node-fetch"
+import dotenv from "dotenv"
+import path from "path"
+import { fileURLToPath } from "url"
 
-export async function getSpotifyToken(){
-    const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID
-    const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET
-    const response = await fetch("https://accounts.spotify.com/api/token", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Authorization":
-                "Basic " + Buffer.from(CLIENT_ID + ":" + CLIENT_SECRET).toString("base64")
-        },
-        body: "grant_type=client_credentials"
-    })
+dotenv.config()
 
-    if(!response.ok){
-        console.error("STATUS:", response.status)
-        console.error("SPOTIFY RESPONSE:", data)
-        throw new Error(data.error_description || "Erro ao autenticar com Spotify")
-    }
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
-    return response.json()
-}
+dotenv.config({ path: path.resolve(__dirname, "../.env") })
+
+import app from "./app.js"
+
+const PORT = process.env.PORT || 3000
+
+app.listen(PORT, () => {
+    console.log(`Servidor rodando na porta ${PORT}`)
+})
