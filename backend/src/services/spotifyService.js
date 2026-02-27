@@ -1,111 +1,128 @@
 import fetch from "node-fetch"
 
-let spotifyToken = null
+let accessToken = null
+let refreshToken = null
 let tokenExpireAt = null
 
-export async function getSpotifyToken(){
-    const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID
-    const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET
+//URL de login
 
-    if(spotifyToken && tokenExpireAt > Date.now()){
-        return spotifyToken
-    }
+export function getSpotifyLoginURL(){
+    const scope = "user-read-private user-read-email"
 
+    return `https://accounts.spotify.com/authorize?` +
+        new URLSearchParams({
+            response_type: "code",
+            client_id: process.env.SPOTIFY_CLIENT_ID,
+            scope,
+            redirect_uri: process.env.SPOTIFY_REDIRECT_URI
+        }).toString()
+}
+
+//Trocar code por token
+
+export async function exchangeCodeForToken(code) {
     const response = await fetch("https://accounts.spotify.com/api/token", {
         method: "POST",
         headers: {
             "Content-Type": "application/x-www-form-urlencoded",
-            "Authorization":
-                "Basic " + Buffer.from(CLIENT_ID + ":" + CLIENT_SECRET).toString("base64")
+            Authorization:
+                "Basic " + Buffer.from(process.env.SPOTIFY_CLIENT_ID + ":" + process.env.SPOTIFY_CLIENT_SECRET).toString("base64"),
         },
-        body: "grant_type=client_credentials"
+        body: new URLSearchParams({
+            grant_type: "authorization_code",
+            code,
+            redirect_uri: process.env.SPOTIFY_REDIRECT_URI,
+        }),
     })
 
     const data = await response.json()
 
-    if(!response.ok){
-        throw new Error(
-            data.error_description || "Erro ao autenticar com Spotify"
-        )
+    if (!response.ok) {
+        throw new Error(JSON.stringify(data))
     }
 
-    spotifyToken = data.access_token
+    accessToken = data.access_token
+    refreshToken = data.refresh_token
     tokenExpireAt = Date.now() + data.expires_in * 1000
+}
 
-    return spotifyToken
+//Refresh automático
 
+async function refreshAcessToken(){
+    const response = await fetch("https://accounts.spotify.com/api/token", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Authorization:
+                "Basic " + Buffer.from(process.env.SPOTIFY_CLIENT_ID + ":" + process.env.SPOTIFY_CLIENT_SECRET).toString("base64"),
+        },
+        body: new URLSearchParams({
+            grant_type: "refresh_token",
+            refresh_token: refreshToken,
+        }),
+    })
+
+    const data = await response.json()
+
+    accessToken = data.access_token
+    tokenExpireAt = Date.now() + data.expires_in * 1000
+}
+
+async function getValidToken(){
+    if(!accessToken){
+        throw new Error("Usuário não autenticado")
+    }
+
+    if(Date.now() > tokenExpireAt){
+        await refreshAcessToken()
+    }
+
+    return accessToken
+}
+
+//Função genérica
+
+async function spotifyFetch(url){
+    const token = await getValidToken()
+
+    const response = await fetch(url, {
+        headers: {
+            Authorization: `Bearer ${token}`,
+        },
+    })
+
+    const text = await response.text()
+
+    if(!response.ok){
+        throw new Error(text)
+    }
+
+    return JSON.parse(text)
 }
 
 //Função de busca
 
 export async function searchSpotify(query, type = "track,album") {
-    const token = await getSpotifyToken()
-
-    const response = await fetch(
-        `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=${type}&limit=10`,
-        {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                Accept: "application/json",
-            },
-        }
+    return spotifyFetch(
+        `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=${type}&limit=10`
     )
-
-    const text = await response.text()
-
-    if (!response.ok) {
-        console.error("SPOTIFY SEARCH ERROR:", text)
-        throw new Error(text)
-    }
-
-    return JSON.parse(text)
 }
 
 //Detalhes - Álbum
 
 export async function getAlbumById(id){
-    const token = await getSpotifyToken()
-
-    const response = await fetch(
-        `https://api.spotify.com/v1/albums/${id}`,
-        {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                Accept: "application/json"
-            },
-        }
+    return spotifyFetch(
+        `https://api.spotify.com/v1/albums/${id}`
     )
-
-    const text = await response.text()
-
-    if (!response.ok) {
-        console.error("SPOTIFY ERROR:", text)
-        throw new Error(text)
-    }
-
-    return JSON.parse(text)
 }
 
 //Detalhes - Música
 export async function getTrackById(id){
-    const token = await getSpotifyToken()
-
-    const response = await fetch(
-        `https://api.spotify.com/v1/tracks/${id}`,
-        {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                Accept: "application/json"
-            },
-        }
+    return spotifyFetch(
+        `https://api.spotify.com/v1/tracks/${id}`
     )
+}
 
-    const text = await response.text()
-
-    if (!response.ok) {
-        console.error("SPOTIFY ERROR:", text)
-        throw new Error(text)
-    }
-
-    return JSON.parse(text)
+export async function getCurrentUser() {
+    return spotifyFetch("https://api.spotify.com/v1/me")
 }
